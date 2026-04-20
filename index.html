@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sparkie — Underwater City</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #010515; font-family: 'Courier New', monospace; }
+    canvas { display: block; }
+    #hint { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); color: rgba(100,150,255,0.4); font-size: 12px; letter-spacing: 0.08em; pointer-events: none; opacity: 1; transition: opacity 2s ease; }
+    #title { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); color: rgba(80,130,220,0.4); font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+<div id="title">🏛️ UNDERWATER CITY 🌊</div>
+<div id="hint">drag to orbit</div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 500);
+camera.position.set(0, 10, 40);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.08;
+controls.maxPolarAngle = Math.PI * 0.55;
+controls.minDistance = 8;
+controls.maxDistance = 80;
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.2, 0.4, 0.05));
+
+scene.add(new THREE.AmbientLight(0x051525, 0.3));
+
+// Ocean floor
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(150, 150, 75, 75),
+  new THREE.ShaderMaterial({
+    uniforms: {},
+    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `
+      varying vec2 vUv;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5); }
+      void main() {
+        float n = hash(floor(vUv * 20.0)) * 0.1;
+        vec3 col = vec3(0.02, 0.05, 0.1) + n;
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `
+  })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = -15;
+scene.add(floor);
+
+// Coral buildings
+const coralColors = [0xff6688, 0x66ffcc, 0x8888ff, 0xffaa44, 0x44aaff, 0xff66ff, 0x88ffaa];
+for (let b = 0; b < 60; b++) {
+  const bw = 2 + Math.random() * 5;
+  const bh = 5 + Math.random() * 20;
+  const bd = 2 + Math.random() * 5;
+  const bx = (Math.random() - 0.5) * 100;
+  const bz = (Math.random() - 0.5) * 100;
+  const color = coralColors[Math.floor(Math.random() * 7)];
+  
+  const building = new THREE.Mesh(
+    new THREE.BoxGeometry(bw, bh, bd),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.3 })
+  );
+  building.position.set(bx, -15 + bh / 2, bz);
+  scene.add(building);
+  
+  // Glowing windows
+  for (let w = 0; w < Math.floor(Math.random() * 8) + 3; w++) {
+    if (Math.random() > 0.4) continue;
+    const winColor = coralColors[Math.floor(Math.random() * 7)];
+    const win = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.4, 0.6),
+      new THREE.MeshStandardMaterial({ color: winColor, emissive: winColor, emissiveIntensity: 2.0 })
+    );
+    win.position.set(
+      bx + (Math.random() - 0.5) * bw * 0.8,
+      -15 + 2 + Math.random() * (bh - 4),
+      bz + bd / 2 + 0.01
+    );
+    scene.add(win);
+  }
+}
+
+// Coral domes
+for (let d = 0; d < 15; d++) {
+  const dx = (Math.random() - 0.5) * 80;
+  const dz = (Math.random() - 0.5) * 80;
+  const color = coralColors[Math.floor(Math.random() * 7)];
+  
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(4 + Math.random() * 6, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.4 })
+  );
+  dome.position.set(dx, -15, dz);
+  scene.add(dome);
+}
+
+// Coral spires
+for (let s = 0; s < 25; s++) {
+  const sx = (Math.random() - 0.5) * 90;
+  const sz = (Math.random() - 0.5) * 90;
+  const sHeight = 8 + Math.random() * 25;
+  const color = coralColors[Math.floor(Math.random() * 7)];
+  
+  const spire = new THREE.Mesh(
+    new THREE.ConeGeometry(1 + Math.random() * 2, sHeight, 8),
+    new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.5 })
+  );
+  spire.position.set(sx, -15 + sHeight / 2, sz);
+  scene.add(spire);
+}
+
+// Bioluminescent plankton
+const plankCount = 600;
+const plankPos = new Float32Array(plankCount * 3);
+for (let i = 0; i < plankCount; i++) {
+  plankPos[i*3] = (Math.random() - 0.5) * 120;
+  plankPos[i*3+1] = -10 + Math.random() * 30;
+  plankPos[i*3+2] = (Math.random() - 0.5) * 120;
+}
+const plankGeo = new THREE.BufferGeometry();
+plankGeo.setAttribute('position', new THREE.BufferAttribute(plankPos, 3));
+const plankMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `
+    uniform float uTime;
+    void main() {
+      vec3 p = position;
+      p.x += sin(uTime * 0.3 + position.y * 0.1) * 0.5;
+      p.y += cos(uTime * 0.2 + position.x * 0.1) * 0.3;
+      gl_PointSize = 8.0;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }
+  `,
+  fragmentShader: `
+    void main() {
+      float d = length(gl_PointCoord - 0.5);
+      if (d > 0.5) discard;
+      float a = (1.0 - d * 2.0) * 0.7;
+      vec3 col = vec3(0.3, 0.8, 1.0);
+      gl_FragColor = vec4(col, a);
+    }
+  `,
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+});
+const plankton = new THREE.Points(plankGeo, plankMat);
+plankton.userData.isPlankton = true;
+scene.add(plankton);
+
+// Fish schools
+const fishColors = [0xff6688, 0x66ffcc, 0x8888ff, 0xffaa44, 0xffffff];
+for (let school = 0; school < 8; school++) {
+  const fishCount = 30;
+  const fishPos = new Float32Array(fishCount * 3);
+  const schoolX = (Math.random() - 0.5) * 80;
+  const schoolY = 2 + Math.random() * 15;
+  const schoolZ = (Math.random() - 0.5) * 80;
+  
+  for (let f = 0; f < fishCount; f++) {
+    fishPos[f*3] = schoolX + (Math.random() - 0.5) * 8;
+    fishPos[f*3+1] = schoolY + (Math.random() - 0.5) * 3;
+    fishPos[f*3+2] = schoolZ + (Math.random() - 0.5) * 8;
+  }
+  
+  const fishGeo = new THREE.BufferGeometry();
+  fishGeo.setAttribute('position', new THREE.BufferAttribute(fishPos, 3));
+  const fishColor = fishColors[Math.floor(Math.random() * 5)];
+  const fishMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: school } },
+    vertexShader: `
+      uniform float uTime;
+      void main() {
+        vec3 p = position;
+        p.x += sin(uTime * 0.8 + position.z * 0.2) * 1.5;
+        p.y += cos(uTime * 0.5 + position.x * 0.1) * 0.3;
+        gl_PointSize = 10.0;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }
+    `,
+    fragmentShader: `
+      void main() {
+        float d = length(gl_PointCoord - 0.5);
+        if (d > 0.5) discard;
+        float a = 1.0 - d * 2.0;
+        vec3 col = vec3(0.9, 0.6, 0.5);
+        gl_FragColor = vec4(col, a);
+      }
+    `,
+    transparent: true, depthWrite: false
+  });
+  const fish = new THREE.Points(fishGeo, fishMat);
+  fish.userData.isFish = true;
+  scene.add(fish);
+}
+
+// Jellyfish
+for (let j = 0; j < 12; j++) {
+  const bellColor = coralColors[Math.floor(Math.random() * 7)];
+  const jellyGroup = new THREE.Group();
+  
+  const bell = new THREE.Mesh(
+    new THREE.SphereGeometry(1 + Math.random(), 12, 12, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: bellColor, emissive: bellColor, emissiveIntensity: 1.5, transparent: true, opacity: 0.6 })
+  );
+  bell.position.y = 0;
+  jellyGroup.add(bell);
+  
+  for (let t = 0; t < 6; t++) {
+    const tentacle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03, 0.01, 4 + Math.random() * 4, 6),
+      new THREE.MeshStandardMaterial({ color: bellColor, transparent: true, opacity: 0.3 })
+    );
+    const angle = (t / 6) * Math.PI * 2;
+    tentacle.position.set(Math.cos(angle) * 0.6, -2, Math.sin(angle) * 0.6);
+    jellyGroup.add(tentacle);
+  }
+  
+  jellyGroup.position.set(
+    (Math.random() - 0.5) * 80,
+    3 + Math.random() * 15,
+    (Math.random() - 0.5) * 80
+  );
+  jellyGroup.userData.jellyPhase = Math.random() * Math.PI * 2;
+  jellyGroup.userData.isJelly = true;
+  scene.add(jellyGroup);
+}
+
+// Light shafts from above
+for (let l = 0; l < 10; l++) {
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 2, 40, 8),
+    new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: l } },
+      vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `
+        varying vec2 vUv;
+        uniform float uTime;
+        void main() {
+          float alpha = (1.0 - vUv.y) * 0.08;
+          vec3 col = vec3(0.3, 0.6, 1.0);
+          gl_FragColor = vec4(col, alpha);
+        }
+      `,
+      transparent: true, depthWrite: false
+    })
+  );
+  shaft.position.set(-30 + l * 7, 10, -30 + l * 5);
+  scene.add(shaft);
+}
+
+// Bubbles rising
+const bubbleCount = 200;
+const bubblePos = new Float32Array(bubbleCount * 3);
+for (let i = 0; i < bubbleCount; i++) {
+  bubblePos[i*3] = (Math.random() - 0.5) * 100;
+  bubblePos[i*3+1] = -10 + Math.random() * 40;
+  bubblePos[i*3+2] = (Math.random() - 0.5) * 100;
+}
+const bubbleGeo = new THREE.BufferGeometry();
+bubbleGeo.setAttribute('position', new THREE.BufferAttribute(bubblePos, 3));
+const bubbleMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `
+    uniform float uTime;
+    void main() {
+      vec3 p = position;
+      p.y = -10 + mod(p.y + uTime * 0.8, 50.0);
+      p.x += sin(uTime * 0.5 + position.y * 0.2) * 0.3;
+      gl_PointSize = 6.0;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }
+  `,
+  fragmentShader: `
+    void main() {
+      float d = length(gl_PointCoord - 0.5);
+      if (d > 0.5) discard;
+      float a = (1.0 - d * 2.0) * 0.3;
+      vec3 col = vec3(0.5, 0.8, 1.0);
+      gl_FragColor = vec4(col, a);
+    }
+  `,
+  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false
+});
+const bubbles = new THREE.Points(bubbleGeo, bubbleMat);
+bubbles.userData.isBubbles = true;
+scene.add(bubbles);
+
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+  
+  if (plankton.userData.isPlankton) plankton.material.uniforms.uTime.value = t;
+  if (bubbles.userData.isBubbles) bubbles.material.uniforms.uTime.value = t;
+  
+  scene.children.forEach(child => {
+    if (child.userData.isJelly) {
+      child.position.y += Math.sin(t * 0.3 + child.userData.jellyPhase) * 0.015;
+      child.position.x += Math.cos(t * 0.2 + child.userData.jellyPhase) * 0.01;
+    }
+    if (child.userData.isFish) {
+      child.material.uniforms.uTime.value = t;
+    }
+  });
+  
+  controls.update();
+  composer.render();
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+setTimeout(() => { document.getElementById('hint').style.opacity = '0'; }, 5000);
+</script>
+</body>
+</html>
